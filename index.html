@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>告知画像ジェネレーター</title>
+    <!-- 日本語のおしゃれなフォントをGoogleから読み込みます -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;800&family=Noto+Sans+JP:wght@700&family=Zen+Kaku+Gothic+New:wght@500&display=swap" rel="stylesheet">
+    <style>
+        /* --- ここはデザイン（見た目）の設定です --- */
+        body {
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+        }
+        .controls {
+            flex: 1;
+            min-width: 300px;
+            text-align: left;
+        }
+        .preview-area {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            border-color: #4a90e2;
+            outline: none;
+        }
+        button {
+            margin-top: 25px;
+            width: 100%;
+            padding: 15px;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background-color: #357abd;
+        }
+        /* キャンバス（画像生成場所）は画面上では隠して、画像タグでプレビューを表示します */
+        canvas {
+            display: none;
+        }
+        img#previewImg {
+            width: 100%;
+            max-width: 300px; /* スマホで見やすいサイズに縮小表示 */
+            height: auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .desc {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎨 告知画像ジェネレーター</h1>
+    <p>入力するだけで、インスタやX用の画像が作れます！</p>
+
+    <div class="container">
+        <!-- 左側：入力エリア -->
+        <div class="controls">
+            <label>📅 日付 (例: 8/25 Sat)</label>
+            <input type="text" id="inputDate" placeholder="日付を入力" value="11/25 (Sat)">
+
+            <label>⏰ 時間 (例: 18:00 OPEN)</label>
+            <input type="text" id="inputTime" placeholder="時間を入力" value="18:00 START">
+
+            <label>📢 タイトル (告知内容)</label>
+            <input type="text" id="inputTitle" placeholder="タイトルを入力" value="文化祭ライブ">
+
+            <label>🎨 デザインを選ぶ</label>
+            <select id="designSelect">
+                <option value="pop">ポップ・イエロー (元気な感じ)</option>
+                <option value="cool">ミッドナイト・ブルー (かっこいい感じ)</option>
+                <option value="elegant">サンセット・ピンク (おしゃれな感じ)</option>
+            </select>
+
+            <button onclick="downloadImage()">画像をダウンロード ⬇️</button>
+            <p class="desc">※ダウンロードボタンを押すと画像が保存されます。</p>
+        </div>
+
+        <!-- 右側：プレビューエリア -->
+        <div class="preview-area">
+            <label>プレビュー</label>
+            <!-- ここに生成された画像が表示されます -->
+            <img id="previewImg" alt="プレビュー">
+        </div>
+    </div>
+
+    <!-- 隠れたキャンバス（ここで実際に絵を描いています） -->
+    <canvas id="myCanvas" width="1080" height="1920"></canvas>
+
+    <script>
+        // --- ここはプログラム（動き）の設定です ---
+
+        // HTMLの要素（部品）を変数に入れます
+        const canvas = document.getElementById('myCanvas');
+        const ctx = canvas.getContext('2d');
+        const previewImg = document.getElementById('previewImg');
+        
+        const inputDate = document.getElementById('inputDate');
+        const inputTime = document.getElementById('inputTime');
+        const inputTitle = document.getElementById('inputTitle');
+        const designSelect = document.getElementById('designSelect');
+
+        // 文字などが変更されたら、画像を書き直すように設定します
+        inputDate.addEventListener('input', draw);
+        inputTime.addEventListener('input', draw);
+        inputTitle.addEventListener('input', draw);
+        designSelect.addEventListener('change', draw);
+
+        // フォントが読み込まれたら再描画するための処理
+        document.fonts.ready.then(function () {
+            draw();
+        });
+
+        // 最初に一回描画します
+        draw();
+
+        // --- 画像を描く関数（メインの処理） ---
+        function draw() {
+            const dateText = inputDate.value;
+            const timeText = inputTime.value;
+            const titleText = inputTitle.value;
+            const design = designSelect.value;
+
+            // キャンバスをクリア（前の絵を消す）
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // デザインごとの処理
+            if (design === 'pop') {
+                drawPopDesign(dateText, timeText, titleText);
+            } else if (design === 'cool') {
+                drawCoolDesign(dateText, timeText, titleText);
+            } else if (design === 'elegant') {
+                drawElegantDesign(dateText, timeText, titleText);
+            }
+
+            // 描いた絵を画像データ(URL)に変換して、<img>タグにセット
+            previewImg.src = canvas.toDataURL('image/png');
+        }
+
+        // --- デザイン1：ポップ・イエロー ---
+        function drawPopDesign(date, time, title) {
+            // 背景
+            ctx.fillStyle = '#FFD700'; // 金色に近い黄色
+            ctx.fillRect(0, 0, 1080, 1920);
+
+            // 装飾（斜めのストライプ）
+            ctx.fillStyle = '#FFA500'; // オレンジ
+            for(let i=-1000; i<3000; i+=100) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i+50, 0);
+                ctx.lineTo(i-1000, 1920);
+                ctx.lineTo(i-1050, 1920);
+                ctx.fill();
+            }
+
+            // 白い枠
+            ctx.fillStyle = 'white';
+            ctx.fillRect(100, 400, 880, 1120);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 10;
+            ctx.strokeRect(100, 400, 880, 1120);
+
+            // 文字設定
+            ctx.fillStyle = '#333';
+            ctx.textAlign = 'center';
+
+            // タイトル
+            ctx.font = '800 120px "M PLUS Rounded 1c"';
+            ctx.fillText(title, 540, 700);
+
+            // 日付
+            ctx.fillStyle = '#FF4500'; // オレンジレッド
+            ctx.font = 'bold 100px "Arial"';
+            ctx.fillText(date, 540, 1000);
+
+            // 時間
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 80px "Arial"';
+            ctx.fillText(time, 540, 1200);
+
+            // "NOTICE"のバッジ
+            ctx.fillStyle = 'black';
+            ctx.fillRect(340, 350, 400, 100);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 60px "Arial"';
+            ctx.fillText("NOTICE", 540, 420);
+        }
+
+        // --- デザイン2：ミッドナイト・ブルー ---
+        function drawCoolDesign(date, time, title) {
+            // 背景
+            ctx.fillStyle = '#0f2027'; // 濃い紺色
+            ctx.fillRect(0, 0, 1080, 1920);
+            
+            // グラデーション背景装飾
+            let grad = ctx.createLinearGradient(0, 0, 1080, 1920);
+            grad.addColorStop(0, '#203a43');
+            grad.addColorStop(1, '#2c5364');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1080, 1920);
+
+            // ネオン風の枠線
+            ctx.strokeStyle = '#00d2ff'; // 水色
+            ctx.lineWidth = 20;
+            ctx.strokeRect(50, 50, 980, 1820);
+
+            ctx.textAlign = 'center';
+
+            // タイトル
+            ctx.shadowColor = "#00d2ff";
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 130px "Noto Sans JP"';
+            ctx.fillText(title, 540, 800);
+            ctx.shadowBlur = 0; // 影をリセット
+
+            // ライン
+            ctx.beginPath();
+            ctx.moveTo(240, 900);
+            ctx.lineTo(840, 900);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+
+            // 日付と時間
+            ctx.fillStyle = '#00d2ff';
+            ctx.font = '500 90px "Zen Kaku Gothic New"';
+            ctx.fillText(date, 540, 1050);
+            ctx.fillText(time, 540, 1200);
+        }
+
+        // --- デザイン3：サンセット・ピンク ---
+        function drawElegantDesign(date, time, title) {
+            // 背景グラデーション
+            let grad = ctx.createLinearGradient(0, 0, 0, 1920);
+            grad.addColorStop(0, '#ff9a9e');
+            grad.addColorStop(1, '#fecfef');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1080, 1920);
+
+            // 半透明の白いボックス
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillRect(140, 500, 800, 920);
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#555';
+
+            // 装飾文字
+            ctx.font = 'italic 60px "Times New Roman"';
+            ctx.fillText("- Information -", 540, 600);
+
+            // タイトル
+            ctx.fillStyle = '#333';
+            ctx.font = '500 110px "Zen Kaku Gothic New"';
+            
+            // 長いタイトルでも折り返す工夫（簡易版）
+            let splitTitle = title.split('');
+            if(title.length > 6) {
+                ctx.fillText(title, 540, 850);
+            } else {
+                ctx.fillText(title, 540, 850);
+            }
+
+            // 日付
+            ctx.fillStyle = '#d9534f';
+            ctx.font = 'bold 100px "Arial"';
+            ctx.fillText(date, 540, 1100);
+
+            // 時間
+            ctx.fillStyle = '#555';
+            ctx.font = 'bold 80px "Arial"';
+            ctx.fillText(time, 540, 1250);
+        }
+
+        // --- ダウンロード機能 ---
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = 'kokuchi_image.png'; // 保存時のファイル名
+            link.href = canvas.toDataURL(); // 画像データをリンクにセット
+            link.click(); // 自動的にクリックしてダウンロード
+        }
+    </script>
+</body>
+</html>
